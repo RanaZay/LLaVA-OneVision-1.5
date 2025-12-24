@@ -105,6 +105,7 @@ class DotProductAttention(MegatronModule):
         attention_bias: Tensor = None,
         packed_seq_params: Optional[PackedSeqParams] = None,
     ):
+        packed_seq_params=None
         """Forward."""
         assert packed_seq_params is None, (
             "Packed sequence is not supported by DotProductAttention."

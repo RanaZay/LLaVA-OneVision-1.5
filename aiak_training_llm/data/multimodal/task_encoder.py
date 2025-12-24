@@ -9,7 +9,7 @@ import sys
 import traceback
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
-
+import logging
 from PIL import Image
 from torchvision.transforms import ToPILImage
 import numpy as np
@@ -309,26 +309,121 @@ class TaskEncoder(DefaultTaskEncoder[OCRSample, OCRSample, ImageTaskBatchPacked,
 
         return packed_samples
 
+    # @stateless
+    # def pack_selected_samples(self, samples: List[ImageTaskSample]) -> List[ImageTaskSamplePacked]:
+    #     """
+    #     Function to pack a list of ImageTaskSample into a single ImageTaskSamplePacked.
+
+    #     NOTE: Energon dataloader calls this method internally if packing is used.
+    #     Please see https://nvidia.github.io/Megatron-Energon/packing.html
+
+    #     Args:
+    #         samples: List of ImageTaskSample instances to pack into one sample.
+
+    #     Returns:
+    #         ImageTaskSamplePacked instance.
+    #     """
+
+    #     packing_seq_len = self.args.seq_length
+
+    #     packed_tokens = []
+    #     packed_labels = []
+    #     packed_masks = []
+    #     packed_imgs = []
+    #     packed_videos = []
+
+    #     current_length = 0
+    #     max_length = 0
+    #     cu_lengths = [0]
+
+    #     # Process each sample and build lists that we will concatenate to create the packed sample.
+    #     for _, sample in enumerate(samples):
+    #         sample_len = sample.total_len
+
+    #         # if sample_len > max_length:
+    #         #     max_length = sample_len
+    #         # If a single sample exceeds the allowed packing_seq_len, truncate its per-token fields.
+    # # Note: Do NOT try to slice the sample object itself (it is not subscriptable).
+    #         if sample_len > packing_seq_len:
+    #             logging.getLogger(__name__).warning(
+    #                 f"Sample {getattr(sample, '__key__', '<unknown>')} length {sample_len} > packing_seq_len {packing_seq_len}. Truncating token fields."
+    #             )
+    #             # Truncate token fields to packing_seq_len (only token-like fields)
+    #             if hasattr(sample, "tokens") and sample.tokens is not None:
+    #                 # tokens might be torch.Tensor or numpy array; keep dtype
+    #                 sample.tokens = sample.tokens[:packing_seq_len]
+    #             if hasattr(sample, "labels") and sample.labels is not None:
+    #                 sample.labels = sample.labels[:packing_seq_len]
+    #             if hasattr(sample, "attn_mask") and sample.attn_mask is not None:
+    #                 sample.attn_mask = sample.attn_mask[:packing_seq_len]
+
+    #             # If total_len property is used, update it to reflect truncation
+    #             sample_len = min(sample_len, packing_seq_len)
+    #             try:
+    #                 sample.total_len = sample_len
+    #             except Exception:
+    #                 # If dataclass is frozen or doesn't allow assign, ignore;
+    #                 # we will use sample_len variable for logic below.
+    #                 pass
+
+    #         # update max_length to be the maximum sample length after truncation
+    #         if sample_len > max_length:
+    #             max_length = sample_len
+
+
+
+    #         # If adding this sample exceeds the max length, stop.
+    #         # This should not happen. 
+    #         # The select_samples_to_pack method should have already ensured that the samples fit.
+    #         if current_length + sample_len > packing_seq_len:
+    #             print(f"packing_seq_len:{packing_seq_len}----<<<<<----{current_length + sample_len}")
+    #             raise ValueError(f"Packed sample exceeds the maximum sequence length of {packing_seq_len}: {samples}")
+
+    #         # Add the sample's tokens and labels
+    #         packed_tokens.append(sample.tokens)
+    #         packed_labels.append(sample.labels)
+    #         packed_masks.append(sample.attn_mask)
+
+    #         # Add the images
+    #         if sample.imgs is not None:
+    #             packed_imgs += sample.imgs
+    #         if sample.pixel_values_videos is not None:
+    #             packed_videos += sample.pixel_values_videos
+    #         current_length += sample_len
+    #         cu_lengths.append(current_length)
+
+    #     # Concatenate packed tokens and labels.
+    #     packed_tokens = torch.cat(packed_tokens, dim=0)
+    #     packed_labels = torch.cat(packed_labels, dim=0)
+    #     packed_masks = torch.cat(packed_masks, dim=0)
+
+    #     return ImageTaskSamplePacked(
+    #         __key__=",".join([s.__key__ for s in samples]),
+    #         __restore_key__=(),  # Will be set by energon based on `samples`
+    #         __subflavor__=None,
+    #         __subflavors__=samples[0].__subflavors__,
+    #         tokens=packed_tokens,
+    #         labels=packed_labels,
+    #         attn_mask=packed_masks,
+    #         imgs=packed_imgs,
+    #         pixel_values_videos=packed_videos,
+    #         cu_lengths=torch.tensor(cu_lengths, dtype=torch.int32),
+    #         max_length=max_length,
+    #         num_tiles=[n for s in samples for n in s.num_tiles],
+    #     )
+
     @stateless
-    def pack_selected_samples(self, samples: List[ImageTaskSample]) -> List[ImageTaskSamplePacked]:
+    def pack_selected_samples(self, samples: List[ImageTaskSample]) -> ImageTaskSamplePacked:
         """
-        Function to pack a list of ImageTaskSample into a single ImageTaskSamplePacked.
-
-        NOTE: Energon dataloader calls this method internally if packing is used.
-        Please see https://nvidia.github.io/Megatron-Energon/packing.html
-
-        Args:
-            samples: List of ImageTaskSample instances to pack into one sample.
-
-        Returns:
-            ImageTaskSamplePacked instance.
+        Pack a list of ImageTaskSample into a single ImageTaskSamplePacked.
+        Truncates samples as needed so the packed sample never exceeds packing_seq_len.
         """
-
         packing_seq_len = self.args.seq_length
 
-        packed_tokens = []
-        packed_labels = []
-        packed_masks = []
+        # Lists of per-token pieces (will be concatenated at the end).
+        packed_tokens_parts = []
+        packed_labels_parts = []
+        packed_masks_parts = []
         packed_imgs = []
         packed_videos = []
 
@@ -336,43 +431,118 @@ class TaskEncoder(DefaultTaskEncoder[OCRSample, OCRSample, ImageTaskBatchPacked,
         max_length = 0
         cu_lengths = [0]
 
-        # Process each sample and build lists that we will concatenate to create the packed sample.
-        for _, sample in enumerate(samples):
-            sample_len = sample.total_len
+        for sample in samples:
+            # Determine sample token length (use available fields)
+            sample_len = int(getattr(sample, "total_len", None) or
+                             (len(sample.tokens) if hasattr(sample, "tokens") and sample.tokens is not None else 0))
 
+            # If the sample itself is longer than the global packing_seq_len, allow truncation
+            if sample_len > packing_seq_len:
+                logging.getLogger(__name__).warning(
+                    f"Sample {getattr(sample, '__key__', '<unknown>')} length {sample_len} > packing_seq_len {packing_seq_len}. "
+                    "Truncating token fields to packing_seq_len."
+                )
+                sample_len = packing_seq_len
+
+            remaining_capacity = packing_seq_len - current_length
+            if remaining_capacity <= 0:
+                # no capacity left (shouldn't normally happen if select_samples_to_pack worked),
+                # stop adding further samples.
+                logging.getLogger(__name__).warning(
+                    "No remaining packing capacity; stopping packing of further samples."
+                )
+                break
+
+            # If this sample would overflow the remaining capacity, we will truncate it to fit.
+            if sample_len > remaining_capacity:
+                logging.getLogger(__name__).warning(
+                    f"Truncating sample {getattr(sample, '__key__', '<unknown>')} from {sample_len} to fit remaining capacity {remaining_capacity}."
+                )
+                sample_len = remaining_capacity
+
+            # Slice the per-token fields safely (they might be torch tensors or numpy arrays)
+            # If a field is missing, create an appropriate dummy slice of length sample_len.
+            def slice_field(field, length):
+                if field is None:
+                    # return a zero-length tensor/array (we'll handle concatenation later)
+                    return None
+                try:
+                    return field[:length]
+                except Exception:
+                    # fallback: convert to torch tensor then slice
+                    try:
+                        t = torch.as_tensor(field)
+                        return t[:length]
+                    except Exception:
+                        return None
+
+            tokens_slice = slice_field(getattr(sample, "tokens", None), sample_len)
+            labels_slice = slice_field(getattr(sample, "labels", None), sample_len)
+            mask_slice = slice_field(getattr(sample, "attn_mask", None), sample_len)
+
+            # Append slices (if None, we will handle later by creating empty tensors)
+            packed_tokens_parts.append(tokens_slice)
+            packed_labels_parts.append(labels_slice)
+            packed_masks_parts.append(mask_slice)
+
+            # For images/videos: keep them as-is (we assume images are not token-aligned)
+            if getattr(sample, "imgs", None) is not None:
+                packed_imgs += list(sample.imgs)
+            if getattr(sample, "pixel_values_videos", None) is not None:
+                packed_videos += list(sample.pixel_values_videos)
+
+            current_length += sample_len
+            cu_lengths.append(current_length)
             if sample_len > max_length:
                 max_length = sample_len
 
-            # If adding this sample exceeds the max length, stop.
-            # This should not happen. 
-            # The select_samples_to_pack method should have already ensured that the samples fit.
-            if current_length + sample_len > packing_seq_len:
-                print(f"packing_seq_len:{packing_seq_len}----<<<<<----{current_length + sample_len}")
-                raise ValueError(f"Packed sample exceeds the maximum sequence length of {packing_seq_len}: {samples}")
+        # If nothing was added, return a minimal packed sample
+        if not packed_tokens_parts:
+            return ImageTaskSamplePacked(
+                __key__="",
+                __restore_key__=(),
+                __subflavor__=None,
+                __subflavors__=samples[0].__subflavors__ if samples else {},
+                tokens=torch.zeros((0,), dtype=torch.int64),
+                labels=torch.zeros((0,), dtype=torch.int64),
+                attn_mask=torch.zeros((0,), dtype=torch.bool),
+                imgs=packed_imgs,
+                pixel_values_videos=packed_videos,
+                cu_lengths=torch.tensor(cu_lengths, dtype=torch.int32),
+                max_length=0,
+                num_tiles=[n for s in samples for n in s.num_tiles] if samples else [],
+            )
 
-            # Add the sample's tokens and labels
-            packed_tokens.append(sample.tokens)
-            packed_labels.append(sample.labels)
-            packed_masks.append(sample.attn_mask)
+        # For concatenation we need to ensure same dtypes. Replace None slices with zero-length tensors.
+        def to_tensor_or_empty(x, dtype=None):
+            if x is None:
+                return torch.zeros((0,), dtype=dtype if dtype is not None else torch.int64)
+            if isinstance(x, torch.Tensor):
+                return x
+            # try to convert numpy/other to tensor
+            try:
+                return torch.as_tensor(x)
+            except Exception:
+                return torch.zeros((0,), dtype=dtype if dtype is not None else torch.int64)
 
-            # Add the images
-            if sample.imgs is not None:
-                packed_imgs += sample.imgs
-            if sample.pixel_values_videos is not None:
-                packed_videos += sample.pixel_values_videos
-            current_length += sample_len
-            cu_lengths.append(current_length)
+        # infer dtypes from first available slices
+        first_tokens = next((p for p in packed_tokens_parts if p is not None), None)
+        first_labels = next((p for p in packed_labels_parts if p is not None), None)
+        first_masks = next((p for p in packed_masks_parts if p is not None), None)
 
-        # Concatenate packed tokens and labels.
-        packed_tokens = torch.cat(packed_tokens, dim=0)
-        packed_labels = torch.cat(packed_labels, dim=0)
-        packed_masks = torch.cat(packed_masks, dim=0)
+        tokens_dtype = first_tokens.dtype if isinstance(first_tokens, torch.Tensor) else torch.int64
+        labels_dtype = first_labels.dtype if isinstance(first_labels, torch.Tensor) else torch.int64
+        masks_dtype = first_masks.dtype if isinstance(first_masks, torch.Tensor) else torch.bool
+
+        packed_tokens = torch.cat([to_tensor_or_empty(p, dtype=tokens_dtype) for p in packed_tokens_parts], dim=0)
+        packed_labels = torch.cat([to_tensor_or_empty(p, dtype=labels_dtype) for p in packed_labels_parts], dim=0)
+        packed_masks = torch.cat([to_tensor_or_empty(p, dtype=masks_dtype) for p in packed_masks_parts], dim=0)
 
         return ImageTaskSamplePacked(
             __key__=",".join([s.__key__ for s in samples]),
-            __restore_key__=(),  # Will be set by energon based on `samples`
+            __restore_key__=(),  # Will be set by energon if needed
             __subflavor__=None,
-            __subflavors__=samples[0].__subflavors__,
+            __subflavors__=samples[0].__subflavors__ if samples else {},
             tokens=packed_tokens,
             labels=packed_labels,
             attn_mask=packed_masks,
@@ -382,7 +552,6 @@ class TaskEncoder(DefaultTaskEncoder[OCRSample, OCRSample, ImageTaskBatchPacked,
             max_length=max_length,
             num_tiles=[n for s in samples for n in s.num_tiles],
         )
-
 
 def print_error_handler(exc: Exception, key: Optional[str]):
     """ Print error handler function called when an exception occurs during loading. """

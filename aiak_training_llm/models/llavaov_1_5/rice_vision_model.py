@@ -33,6 +33,7 @@ def apply_rotary_pos_emb_vision(t, freqs, config, cu_seqlens=None, rotary_interl
     return t.to(orig_dtype)
 
 
+
 class PatchEmbed(torch.nn.Module):
     """" Patch Embedding """
     def __init__(

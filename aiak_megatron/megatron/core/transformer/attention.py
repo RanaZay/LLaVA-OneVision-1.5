@@ -648,7 +648,7 @@ class SelfAttention(Attention):
             self.hidden_size_per_attention_head,
             self.hidden_size_per_attention_head,
         ]
-
+        
         if SplitAlongDim is not None:
             # [sq, b, ng, (np/ng + 2) * hn]
             # --> [sq, b, ng, np/ng * hn], [sq, b, ng, hn], [sq, b, ng, hn]

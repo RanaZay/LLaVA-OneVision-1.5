@@ -1,14 +1,19 @@
-AIAK_TRAINING_PATH="${AIAK_TRAINING_PATH:-/workspace/LLaVA-OneVision-1.5}"
-AIAK_MAGATRON_PATH="${AIAK_MAGATRON_PATH:-${AIAK_TRAINING_PATH%/}/aiak_megatron}"
-TP="${1:-1}"
-PP="${2:-1}"
-SEQ_LEN="${3:-32768}"
-MBS="${4:-1}"
-GBS="${5:-8}"
-NSTEP="${6:-2500}"
-DATA_PATH=${DATA_PATH:-"/workspace/dataset/LLaVA-558K-Webdataset"}
-TOKENIZER_PATH=${TOKENIZER_PATH:-"/workspace/LLaVA-OneVision-1.5/LLaVA-OneVision-1.5-4B-stage0"}
-CHECKPOINT_PATH=${CHECKPOINT_PATH:-"/workspace/LLaVA-OneVision-1.5/LLaVA-OneVision-1.5-4B-stage0_mcore_tp1_pp1"}
+AIAK_TRAINING_PATH="${AIAK_TRAINING_PATH:-/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5}" #Root of the LLaVA-OneVision training repo
+AIAK_MAGATRON_PATH="${AIAK_MAGATRON_PATH:-${AIAK_TRAINING_PATH%/}/aiak_megatron}" # Megatron-LM fork used (aiak_megatron) inside the training repo.
+# TP="${1:-1}" # Tensor parallel
+TP="${1:-2}"
+PP="${2:-1}" # pipeline parallel
+# Defaults: TP=1, PP=1.
+# SEQ_LEN="${3:-32768}"
+SEQ_LEN="${3:-2048}" 
+MBS="${4:-1}" # micro batch size 
+# GBS="${5:-8}" # global batch size
+GBS="${5:-2}"
+# NSTEP="${6:-2500}" # number of training iterations
+NSTEP="${6:-5}" # number of training iterations
+DATA_PATH=${DATA_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/data/LLaVA-558K-Webdataset"}
+TOKENIZER_PATH=${TOKENIZER_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0"}
+CHECKPOINT_PATH=${CHECKPOINT_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp2_pp1"}
 
 #! /bin/bash
 # The script needs to be run on at least 1 nodes.
@@ -76,7 +81,7 @@ TENSORBOARD_PATH="${SAVE_CKPT_PATH}/tensorboard"
 mkdir -p "$SAVE_CKPT_PATH"
 mkdir -p "$TENSORBOARD_PATH"
 mkdir -p "$SAVE_CKPT_PATH/dataloader"
-GPUS_PER_NODE=8
+GPUS_PER_NODE=2
 
 # Change for multinode config
 MASTER_ADDR=${MASTER_ADDR:-"${list_ip[0]}"}
@@ -106,21 +111,23 @@ DATA_ARGS=(
     --data-path "$DATA_PATH"
     --dataloader-type external
     --split 100,0,0
-    --num-workers 16
-    --chat-template qwen2-vl
+    --num-workers 1
+    --chat-template qwen2-vl # will change this chat template 
 )
 
 TRAINING_ARGS=(
     --training-phase sft
     --trainable-modules adapter
+    --no-gradient-accumulation-fusion
     --seq-length "${SEQ_LEN}"
+    --transformer-impl local 
     --max-position-embeddings 32768
     --init-method-std 0.02
     --micro-batch-size "${MBS}"
     --global-batch-size "${GBS}"
     --lr 1.0e-4
     --min-lr 1.0e-6
-    --clip-grad 1.0
+    --clip-grad 1.0 # gradient norm clipping.
     --weight-decay 0
     --optimizer adam
     --adam-beta1 0.9
@@ -133,8 +140,8 @@ TRAINING_ARGS=(
     --lr-warmup-fraction 0.002
     --initial-loss-scale 65536
     --bf16
-    --load "$CHECKPOINT_PATH"
-    --save "$SAVE_CKPT_PATH"
+    --load "$CHECKPOINT_PATH" # load initial checkpoint.
+    --save "$SAVE_CKPT_PATH" # where to save new checkpoints.
     --save-interval 2000
     --ckpt-format torch
     --dataloader-save "${SAVE_CKPT_PATH}/dataloader"
@@ -171,8 +178,10 @@ logfile="${SAVE_CKPT_PATH}/run_${TM}_tp${TP}_pp${PP}_seqlen${SEQ_LEN}_mbs${MBS}_
 
 export OFFLINE_PACKED_DATA='1'
 export OFFLINE_PACKING_VQA='1'
-export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-export PYTORCH_CUDA_ALLOC_CONF=garbage_collection_threshold:0.72
+# export PYTORCH_ALLOC_CONF=max_split_size_mb:128
+# export PYTORCH_ALLOC_CONF=garbage_collection_threshold:0.72
+export PYTORCH_ALLOC_CONF=max_split_size_mb:128,garbage_collection_threshold:0.72
+
 
 PYTHONPATH="$AIAK_MAGATRON_PATH:$AIAK_TRAINING_PATH:$PYTHONPATH" \
     torchrun "${DISTRIBUTED_ARGS[@]}" \
