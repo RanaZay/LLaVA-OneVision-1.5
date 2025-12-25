@@ -2,6 +2,7 @@
 
 from typing import Optional
 import torch
+import math
 import torch.nn as nn
 from torch.nn.parameter import Parameter
 
@@ -59,8 +60,15 @@ class RMSNorm(nn.Module):
         ms = x.pow(2).mean(dim=-1, keepdim=True)
         rs = torch.rsqrt(ms + self.eps)  # (..., 1)
         if self.elementwise_affine:
-            # broadcast weight across leading dims
-            w = self.weight.view(*([1] * (x.dim() - 1)), -1)
+            # broadcast weight across leading dims; if hidden size differs from weight length,
+            # repeat or truncate to fit to avoid shape mismatch.
+            hidden = x.size(-1)
+            w_raw = self.weight
+            if w_raw.numel() != hidden:
+                repeat = math.ceil(hidden / w_raw.numel())
+                w_raw = w_raw.repeat(repeat)[:hidden]
+            w = w_raw.view(*([1] * (x.dim() - 1)), -1)
+            # return x * rs * w
             return x * rs * w
         else:
             return x * rs

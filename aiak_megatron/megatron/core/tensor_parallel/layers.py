@@ -419,7 +419,6 @@ class LinearWithGradAccumulationAndAsyncCommunication(torch.autograd.Function):
         ctx.save_for_backward(input, weight)
         ctx.use_bias = bias is not None
         ctx.gradient_accumulation_fusion = gradient_accumulation_fusion
-        print( "1",ctx.gradient_accumulation_fusion)
         ctx.allreduce_dgrad = allreduce_dgrad
         ctx.sequence_parallel = sequence_parallel
         ctx.wgrad_deferral_limit = wgrad_deferral_limit
@@ -1056,7 +1055,6 @@ class RowParallelLinear(torch.nn.Module):
         self.is_expert = is_expert
         self.expert_parallel = config.expert_model_parallel_size > 1
         self.gradient_accumulation_fusion = config.gradient_accumulation_fusion
-        print("3",self.gradient_accumulation_fusion)
         self.sequence_parallel = config.sequence_parallel
         if self.sequence_parallel and not self.input_is_parallel:
             raise RuntimeError("To enable `sequence_parallel`, `input_is_parallel` must be `True`")

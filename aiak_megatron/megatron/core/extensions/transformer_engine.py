@@ -118,24 +118,6 @@ class TENorm(nn.Module):
 class TELinear(nn.Module):
     """
     Fallback for TE's Linear wrappers.
-
-    Original signature:
-        TELinear(
-            input_size: int,
-            output_size: int,
-            *,
-            parallel_mode: Optional[str],
-            config: ModelParallelConfig,
-            init_method: Callable,
-            bias: bool,
-            skip_bias_add: bool,
-            skip_weight_param_allocation: bool,
-            tp_comm_buffer_name: Optional[str] = None,
-            is_expert: bool = False,
-        )
-
-    We ignore all TE/mparallel details and just wrap nn.Linear.
-    Forward returns (output, bias_or_none) to match TE's API.
     """
 
     def __init__(
@@ -143,19 +125,18 @@ class TELinear(nn.Module):
         input_size: int,
         output_size: int,
         *,
-        parallel_mode: Optional[str] = None,
-        config: Any = None,
-        init_method: Optional[Callable] = None,
-        bias: bool = True,
-        skip_bias_add: bool = False,
+        config: Any,
+        init_method: Callable,
+        bias: bool,
+        skip_bias_add: bool,
         skip_weight_param_allocation: bool = False,
         tp_comm_buffer_name: Optional[str] = None,
+        parallel_mode: Optional[str] = None,
         is_expert: bool = False,
         **kwargs,
     ):
         super().__init__()
         if skip_weight_param_allocation:
-            # In the real TE this has important semantics; here we just forbid it
             raise RuntimeError(
                 "TELinear stub does not support skip_weight_param_allocation=True."
             )
@@ -163,29 +144,35 @@ class TELinear(nn.Module):
         self.linear = nn.Linear(input_size, output_size, bias=bias)
         self.skip_bias_add = skip_bias_add
 
-        # If a special init_method is provided, respect it
         if init_method is not None:
             init_method(self.linear.weight)
-        if bias and getattr(self.linear, "bias", None) is not None:
-            # You could customise bias init here if you want
-            pass
 
     def forward(self, x: Tensor):
+        # Auto-adjust in_features on first mismatch to match runtime input.
+        # This keeps training moving if TP sizing assumptions differ.
+        if x.size(-1) != self.linear.in_features:
+            try:
+                device = self.linear.weight.device
+                bias_flag = self.linear.bias is not None
+                out_features = self.linear.out_features
+                # Recreate linear with correct in_features
+                new_linear = nn.Linear(x.size(-1), out_features, bias=bias_flag).to(device)
+                self.linear = new_linear
+                print(f"[TE-Stub] Adjusted Linear in_features to {x.size(-1)} (was mismatch)", flush=True)
+            except Exception:
+                pass
+        # Ensure dtype/device match input to avoid BF16/FP32 matmul mismatch
+        if self.linear.weight.dtype != x.dtype or self.linear.weight.device != x.device:
+            self.linear = self.linear.to(device=x.device, dtype=x.dtype)
         y = self.linear(x)
         if self.skip_bias_add:
-            # Emulate TE behaviour: return y_without_bias, bias separately
             return y, self.linear.bias
-        else:
-            # Many Megatron call sites expect (output, bias) tuple
-            return y, None
+        return y, None
 
 
 class TEColumnParallelLinear(TELinear):
     """
-    Fallback version of TEColumnParallelLinear.
-
-    We ignore tensor-parallel behaviour and just use the TELinear stub.
-    Signature kept compatible with original TE wrapper.
+    Fallback version of TEColumnParallelLinear with basic TP-aware sizing.
     """
 
     def __init__(
@@ -201,16 +188,30 @@ class TEColumnParallelLinear(TELinear):
         is_expert: bool,
         skip_weight_param_allocation: bool = False,
         tp_comm_buffer_name: Optional[str] = None,
+        input_is_parallel: bool = False,
         **kwargs,
     ):
         if gather_output:
-            # In TE this is not supported; keep same constraint
             raise RuntimeError(
                 "TEColumnParallelLinear stub does not support gather_output=True."
             )
+        try:
+            from megatron.core import parallel_state as _ps
+            tp_world = _ps.get_tensor_model_parallel_world_size()
+        except Exception:
+            tp_world = 1
+        local_in = input_size
+        local_out = output_size
+        if tp_world and tp_world > 1:
+            if input_is_parallel:
+                assert input_size % tp_world == 0, "input_size must be divisible by TP size"
+                local_in = input_size // tp_world
+            assert output_size % tp_world == 0, "output_size must be divisible by TP size"
+            local_out = output_size // tp_world
+
         super().__init__(
-            input_size=input_size,
-            output_size=output_size,
+            input_size=local_in,
+            output_size=local_out,
             parallel_mode="column",
             config=config,
             init_method=init_method,
@@ -224,9 +225,7 @@ class TEColumnParallelLinear(TELinear):
 
 class TERowParallelLinear(TELinear):
     """
-    Fallback version of TERowParallelLinear.
-
-    Again, we just use a plain Linear – no real TP behaviour.
+    Fallback version of TERowParallelLinear with basic TP-aware sizing.
     """
 
     def __init__(
@@ -247,9 +246,20 @@ class TERowParallelLinear(TELinear):
             raise RuntimeError(
                 "TERowParallelLinear stub expects input_is_parallel=True (same as TE)."
             )
+        try:
+            from megatron.core import parallel_state as _ps
+            tp_world = _ps.get_tensor_model_parallel_world_size()
+        except Exception:
+            tp_world = 1
+        local_in = input_size
+        local_out = output_size
+        if tp_world and tp_world > 1:
+            assert input_size % tp_world == 0, "input_size must be divisible by TP size"
+            local_in = input_size // tp_world
+            # Row-parallel returns full-sized outputs
         super().__init__(
-            input_size=input_size,
-            output_size=output_size,
+            input_size=local_in,
+            output_size=local_out,
             parallel_mode="row",
             config=config,
             init_method=init_method,

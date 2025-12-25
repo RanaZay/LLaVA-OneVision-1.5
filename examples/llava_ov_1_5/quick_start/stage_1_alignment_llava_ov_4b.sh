@@ -5,12 +5,12 @@ TP="${1:-2}"
 PP="${2:-1}" # pipeline parallel
 # Defaults: TP=1, PP=1.
 # SEQ_LEN="${3:-32768}"
-SEQ_LEN="${3:-2048}" 
+SEQ_LEN="${3:-512}" 
 MBS="${4:-1}" # micro batch size 
 # GBS="${5:-8}" # global batch size
-GBS="${5:-2}"
+GBS="${5:-8}"
 # NSTEP="${6:-2500}" # number of training iterations
-NSTEP="${6:-5}" # number of training iterations
+NSTEP="${6:-20}" # number of training iterations
 DATA_PATH=${DATA_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/data/LLaVA-558K-Webdataset"}
 TOKENIZER_PATH=${TOKENIZER_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0"}
 CHECKPOINT_PATH=${CHECKPOINT_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp2_pp1"}
@@ -111,7 +111,7 @@ DATA_ARGS=(
     --data-path "$DATA_PATH"
     --dataloader-type external
     --split 100,0,0
-    --num-workers 1
+    --num-workers 16
     --chat-template qwen2-vl # will change this chat template 
 )
 
@@ -120,6 +120,8 @@ TRAINING_ARGS=(
     --trainable-modules adapter
     --no-gradient-accumulation-fusion
     --seq-length "${SEQ_LEN}"
+    --no-rope-fusion
+    --training-rice-vl-max-answer-length 512
     --transformer-impl local 
     --max-position-embeddings 32768
     --init-method-std 0.02
@@ -153,7 +155,8 @@ TRAINING_ARGS=(
 )
 
 MODEL_PARALLEL_ARGS=(
-    --attention-backend flash
+    # --attention-backend flash
+    --attention-backend local
     --pipeline-model-parallel-size "${PP}"
     --tensor-model-parallel-size "${TP}"
     --use-distributed-optimizer
