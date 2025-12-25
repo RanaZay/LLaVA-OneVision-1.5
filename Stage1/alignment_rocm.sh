@@ -12,9 +12,19 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --output=/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/Stage1/logs/%x-%j.out
 
+#!/bin/bash
+
 # ---- ENV SETUP (ROCm) ----
 source ~/.bashrc
-conda activate llava-ov-4b-clean
+# Optional: override with `CONDA_ENV=myenv` before running
+CONDA_ENV=${CONDA_ENV:-llava-ov-4b-clean}
+if command -v conda >/dev/null 2>&1; then
+	if conda env list | awk '{print $1}' | grep -qx "$CONDA_ENV"; then
+		conda activate "$CONDA_ENV"
+	else
+		echo "[Warn] Conda env '$CONDA_ENV' not found; continuing without activation"
+	fi
+fi
 
 export ROCM_HOME=${ROCM_HOME:-/opt/rocm}
 export PATH="${ROCM_HOME}/bin:${PATH}"
@@ -30,14 +40,18 @@ export NCCL_COLLNET_ENABLE=${NCCL_COLLNET_ENABLE:-0}
 export NCCL_P2P_ENABLE=${NCCL_P2P_ENABLE:-1}
 # export NCCL_SOCKET_IFNAME=eno1   # uncomment and set to your NIC if needed
 
+# Resolve repo root relative to this script (Stage1/..)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+
 # Go to repo root
-cd /l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5
+cd "$REPO_ROOT" || { echo "[Error] Repo root not found: $REPO_ROOT"; exit 1; }
 
 # Required environment variables
-AIAK_TRAINING_PATH=/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5 \
-DATA_PATH=/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/data/LLaVA-558K-Webdataset \
-TOKENIZER_PATH=/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0 \
-CHECKPOINT_PATH=/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp1_pp1 \
+AIAK_TRAINING_PATH=${AIAK_TRAINING_PATH:-$REPO_ROOT} \
+DATA_PATH=${DATA_PATH:-$REPO_ROOT/data/LLaVA-558K-Webdataset} \
+TOKENIZER_PATH=${TOKENIZER_PATH:-$REPO_ROOT/checkpoints/LLaVA-OneVision-1.5-4B-stage0} \
+CHECKPOINT_PATH=${CHECKPOINT_PATH:-$REPO_ROOT/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp1_pp1} \
 
 echo "AIAK_TRAINING_PATH=${AIAK_TRAINING_PATH}"
 echo "DATA_PATH=${DATA_PATH}"
@@ -46,4 +60,9 @@ echo "CHECKPOINT_PATH=${CHECKPOINT_PATH}"
 echo "SLURM_NODELIST=${SLURM_NODELIST}"
 
 # Launch quick-start script (uses torchrun and nccl backend which maps to RCCL on ROCm)
-bash examples/llava_ov_1_5/quick_start/stage_1_alignment_llava_ov_4b.sh
+QS="$REPO_ROOT/examples/llava_ov_1_5/quick_start/stage_1_alignment_llava_ov_4b.sh"
+if [[ ! -f "$QS" ]]; then
+	echo "[Error] Quick-start script not found: $QS"
+	exit 1
+fi
+bash "$QS"
