@@ -1,7 +1,9 @@
-AIAK_TRAINING_PATH="${AIAK_TRAINING_PATH:-/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5}" #Root of the LLaVA-OneVision training repo
-AIAK_MAGATRON_PATH="${AIAK_MAGATRON_PATH:-${AIAK_TRAINING_PATH%/}/aiak_megatron}" # Megatron-LM fork used (aiak_megatron) inside the training repo.
+REPO_ROOT=/share/data/drive_3/mobile_vlm/LLaVA-OneVision-1.5
+echo "$REPO_ROOT"
+AIAK_TRAINING_PATH="${AIAK_TRAINING_PATH:-$REPO_ROOT}" #Root of the LLaVA-OneVision training repo
+AIAK_MAGATRON_PATH="${AIAK_MAGATRON_PATH:-$REPO_ROOT/aiak_megatron}" # Megatron-LM fork used (aiak_megatron) inside the training repo.
 # TP="${1:-1}" # Tensor parallel
-TP="${1:-2}"
+TP="${1:-1}"
 PP="${2:-1}" # pipeline parallel
 # Defaults: TP=1, PP=1.
 # SEQ_LEN="${3:-32768}"
@@ -11,10 +13,17 @@ MBS="${4:-1}" # micro batch size
 GBS="${5:-8}"
 # NSTEP="${6:-2500}" # number of training iterations
 NSTEP="${6:-20}" # number of training iterations
-DATA_PATH=${DATA_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/data/LLaVA-558K-Webdataset"}
-TOKENIZER_PATH=${TOKENIZER_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0"}
-CHECKPOINT_PATH=${CHECKPOINT_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp2_pp1"}
-
+# DATA_PATH=${DATA_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/data/LLaVA-558K-Webdataset"}
+# TOKENIZER_PATH=${TOKENIZER_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0"}
+# CHECKPOINT_PATH=${CHECKPOINT_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp2_pp1"}
+DATA_PATH="${DATA_PATH:-"$REPO_ROOT/data/LLaVA-558K-Webdataset"}"
+TOKENIZER_PATH="${TOKENIZER_PATH:-"$REPO_ROOT/checkpoints/LLaVA-OneVision-1.5-4B-stage0"}"
+CHECKPOINT_PATH="${CHECKPOINT_PATH:-"$REPO_ROOT/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp1_pp1"}"
+echo "AIAK_TRAINING_PATH=${AIAK_TRAINING_PATH}"
+echo "DATA_PATH=${DATA_PATH}"
+echo "TOKENIZER_PATH=${TOKENIZER_PATH}"
+echo "CHECKPOINT_PATH=${CHECKPOINT_PATH}"
+echo "SLURM_NODELIST=${SLURM_NODELIST}"
 #! /bin/bash
 # The script needs to be run on at least 1 nodes.
 
@@ -81,7 +90,7 @@ TENSORBOARD_PATH="${SAVE_CKPT_PATH}/tensorboard"
 mkdir -p "$SAVE_CKPT_PATH"
 mkdir -p "$TENSORBOARD_PATH"
 mkdir -p "$SAVE_CKPT_PATH/dataloader"
-GPUS_PER_NODE=2
+GPUS_PER_NODE=${GPUS_PER_NODE:-2}
 
 # Change for multinode config
 MASTER_ADDR=${MASTER_ADDR:-"${list_ip[0]}"}
