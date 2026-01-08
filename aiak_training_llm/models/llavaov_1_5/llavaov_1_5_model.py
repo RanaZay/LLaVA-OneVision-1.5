@@ -18,6 +18,7 @@ from torch import Tensor
 
 from aiak_training_llm.models.llavaov_1_5.rice_vision_model import (
     RiceViTModel, VisionModel)
+from aiak_training_llm.models.fastvit import FastViTModel
 from aiak_training_llm.models.qwen import QwenModel
 from aiak_training_llm.models.qwen_vl.adapter import Adapter
 from aiak_training_llm.models.qwen_vl.utils import get_inputs_on_this_cp_rank
@@ -161,11 +162,17 @@ class LlavaOnevision1_5(MegatronModule):
 
         #  define the vision model and the projection from vision model outputs to language model inputs.
         if self.add_encoder:
-            # if vision_config.normalization == "RMSNorm":
-            self.vision_model = RiceViTModel(
+            # Use FastViT as the vision encoder (following FastVLM repo)
+            self.vision_model = FastViTModel(
                 vision_config,
                 vision_layer_spec,
             )
+            # Original Rice/SigLIP encoder (commented out):
+            # if vision_config.normalization == "RMSNorm":
+            #     self.vision_model = RiceViTModel(
+            #         vision_config,
+            #         vision_layer_spec,
+            #     )
             # else:
             #     self.vision_model = VisionModel(
             #         vision_config,
@@ -173,8 +180,8 @@ class LlavaOnevision1_5(MegatronModule):
             #     )
             # Map (intermediate) vision model outputs to the language model input dimension.
             # from megatron.training import print_rank_0
-            # print_rank_0(f"vision_config.hidden_size: {vision_config.hidden_size}")
-            # print_rank_0(f"language_config.hidden_size: {language_config.hidden_size}")
+            print(f"[DEBUG] Creating adapter: vision_config.hidden_size={vision_config.hidden_size}")
+            print(f"[DEBUG] Creating adapter: language_config.hidden_size={language_config.hidden_size}")
             self.adapter = Adapter(
                 adapter_config,
                 adapter_layer_spec,

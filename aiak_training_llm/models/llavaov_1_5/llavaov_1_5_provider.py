@@ -55,6 +55,13 @@ def rice_vl_model_provider(
     # get vision specific config : no. of layers, hidden size, Patch size, Image resolution
     for k, v in asdict(get_vision_config(model_family, args.model_name)).items():
         setattr(vision_config, k, v)
+    
+    # Add FastViT-specific configuration if enabled
+    if getattr(args, 'use_fastvit', False):
+        vision_tower_name = getattr(args, 'vision_tower_name', 'mobileclip_l_384')
+        setattr(vision_config, 'vision_tower_name', vision_tower_name)
+        print_rank_0(f'Using FastViT with vision_tower_name: {vision_tower_name}')
+    
     print_rank_0(f'Vision config: {vision_config}')
     # get adapter specific config : Projection dimension, Activation function
     for k, v in asdict(get_adapeter_config(model_family)).items():
@@ -142,6 +149,8 @@ def rice_vl_model_provider(
         language_rotary_percent=args.rotary_percent,
         language_rotary_base=args.rotary_base,
         seq_len_interpolation_factor=args.rotary_seq_len_interpolation_factor,
+        # When using FastViT, adapter dimensions change, so allow missing adapter weights
+        allow_missing_adapter_checkpoint=getattr(args, 'use_fastvit', False),
     )
     # Vision encoder: SigLIP with 27 layers
     # Adapter: Projection network

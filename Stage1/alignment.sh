@@ -51,7 +51,12 @@ export LD_LIBRARY_PATH="/usr/local/cuda-12.1/lib64:/usr/local/cuda-12.1/targets/
 # echo "CHECKPOINT_PATH=${CHECKPOINT_PATH}"
 # echo "SLURM_NODELIST=${SLURM_NODELIST}"
 
-export CUDA_VISIBLE_DEVICES=7
-export GPUS_PER_NODE=1
+# Weights & Biases configuration
+export WANDB_API_KEY="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"
+export WANDB_PROJECT="llava-ov-1_5"
+export WANDB_NAME="fastvit_integration"
 
-bash examples/llava_ov_1_5/quick_start/stage_1_alignment_llava_ov_4b.sh 1 1
+export CUDA_VISIBLE_DEVICES=0,1  
+export GPUS_PER_NODE=2
+
+bash examples/llava_ov_1_5/quick_start/stage_1_alignment_llava_ov_4b.sh 2 1

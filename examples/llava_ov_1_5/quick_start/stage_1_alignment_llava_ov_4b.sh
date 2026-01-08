@@ -18,7 +18,7 @@ NSTEP="${6:-20}" # number of training iterations
 # CHECKPOINT_PATH=${CHECKPOINT_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp2_pp1"}
 DATA_PATH="${DATA_PATH:-"$REPO_ROOT/data/LLaVA-558K-Webdataset"}"
 TOKENIZER_PATH="${TOKENIZER_PATH:-"$REPO_ROOT/checkpoints/LLaVA-OneVision-1.5-4B-stage0"}"
-CHECKPOINT_PATH="${CHECKPOINT_PATH:-"$REPO_ROOT/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp1_pp1"}"
+CHECKPOINT_PATH="${CHECKPOINT_PATH:-"$REPO_ROOT/checkpoints/LLaVA-OneVision-1.5-4B-stage0_mcore_tp2_pp1"}"
 echo "AIAK_TRAINING_PATH=${AIAK_TRAINING_PATH}"
 echo "DATA_PATH=${DATA_PATH}"
 echo "TOKENIZER_PATH=${TOKENIZER_PATH}"
@@ -122,6 +122,13 @@ DATA_ARGS=(
     --split 100,0,0
     --num-workers 16
     --chat-template qwen2-vl # will change this chat template 
+    
+    # FastViT configuration (following FastVLM repo)
+    --use-fastvit  # Enable FastViT vision encoder
+    --fastvit-image-size 384  # FastViT input resolution (384, 448, or 512)
+    --vision-tower-name mobileclip_l_384  # FastViT model variant (mobileclip_l_{resolution})
+    --image-aspect-ratio pad  # Image preprocessing: pad (square with padding), anyres (multi-res), square (direct resize)
+    # --image-grid-pinpoints "[(384, 384), (768, 384), (384, 768), (768, 768)]"  # Uncomment for anyres mode
 )
 
 TRAINING_ARGS=(
@@ -151,7 +158,7 @@ TRAINING_ARGS=(
     --lr-warmup-fraction 0.002
     --initial-loss-scale 65536
     --bf16
-    --load "$CHECKPOINT_PATH" # load initial checkpoint.
+    # --load "$REPO_ROOT/checkpoints/llava-fastvithd_1.5b_mcore_tp2_pp1"  # Training from scratch
     --save "$SAVE_CKPT_PATH" # where to save new checkpoints.
     --save-interval 2000
     --ckpt-format torch
