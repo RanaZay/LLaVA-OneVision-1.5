@@ -14,7 +14,7 @@ class FastViTImageProcessor:
     Uses CLIPImageProcessor with specific settings for FastViT.
     """
     
-    def __init__(self, image_size=384):
+    def __init__(self, image_size=1024):
         """
         Initialize FastViT image processor.
         

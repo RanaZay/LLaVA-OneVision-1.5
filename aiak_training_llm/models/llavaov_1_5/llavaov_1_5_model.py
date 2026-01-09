@@ -167,6 +167,7 @@ class LlavaOnevision1_5(MegatronModule):
                 vision_config,
                 vision_layer_spec,
             )
+            print(f'self,vision_model: {self.vision_model}')
             # Original Rice/SigLIP encoder (commented out):
             # if vision_config.normalization == "RMSNorm":
             #     self.vision_model = RiceViTModel(

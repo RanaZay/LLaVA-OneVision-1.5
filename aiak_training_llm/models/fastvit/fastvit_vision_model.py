@@ -37,7 +37,7 @@ class FastViTModel(MegatronModule):
         # Format: mobileclip_l_{resolution}
         # The first two parts must match the config file name (mobileclip_l.json)
         # The resolution is extracted from the last part
-        vision_tower_name = "mobileclip_l_384"  # Default to 384
+        vision_tower_name = "mobileclip_l_1024"  
         
         # Override with config if provided
         if hasattr(config, 'vision_tower_name'):
@@ -67,6 +67,7 @@ class FastViTModel(MegatronModule):
             Vision features [batch, num_tokens, hidden_size]
             window_index: None (FastViT doesn't use windowing)
         """
+        print(f"[FastViTModel] Input images shape: {images.shape}, grid_thw: {grid_thw}")
         # MobileCLIPVisionTower expects single images or list of images
         # For batch processing, we need to handle it appropriately
         if images.dim() == 4:
@@ -75,6 +76,7 @@ class FastViTModel(MegatronModule):
         else:
             raise ValueError(f"Unexpected image tensor shape: {images.shape}")
         
+        print(f"[FastViTModel] Output features shape: {image_features.shape}")
         # Return features and None for window_index (compatibility with Qwen2-VL API)
         return image_features, None
     

@@ -10,7 +10,7 @@ PP="${2:-1}" # pipeline parallel
 SEQ_LEN="${3:-512}" 
 MBS="${4:-1}" # micro batch size 
 # GBS="${5:-8}" # global batch size
-GBS="${5:-8}"
+GBS="${5:-1}"
 # NSTEP="${6:-2500}" # number of training iterations
 NSTEP="${6:-20}" # number of training iterations
 # DATA_PATH=${DATA_PATH:-"/l/users/rana.zayed/new_fastvlm/LLaVA-OneVision-1.5/data/LLaVA-558K-Webdataset"}
@@ -90,7 +90,7 @@ TENSORBOARD_PATH="${SAVE_CKPT_PATH}/tensorboard"
 mkdir -p "$SAVE_CKPT_PATH"
 mkdir -p "$TENSORBOARD_PATH"
 mkdir -p "$SAVE_CKPT_PATH/dataloader"
-GPUS_PER_NODE=${GPUS_PER_NODE:-2}
+GPUS_PER_NODE=${GPUS_PER_NODE:-1}
 
 # Change for multinode config
 MASTER_ADDR=${MASTER_ADDR:-"${list_ip[0]}"}
@@ -123,9 +123,9 @@ DATA_ARGS=(
     --num-workers 16
     --chat-template qwen2-vl # will change this chat template 
     
-    # FastViT configuration (following FastVLM repo)
+    # FastViT configuration 
     --use-fastvit  # Enable FastViT vision encoder
-    --fastvit-image-size 384  # FastViT input resolution (384, 448, or 512)
+    --fastvit-image-size 1024  # FastViT input resolution
     --vision-tower-name mobileclip_l_384  # FastViT model variant (mobileclip_l_{resolution})
     --image-aspect-ratio pad  # Image preprocessing: pad (square with padding), anyres (multi-res), square (direct resize)
     # --image-grid-pinpoints "[(384, 384), (768, 384), (384, 768), (768, 768)]"  # Uncomment for anyres mode

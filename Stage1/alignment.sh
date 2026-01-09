@@ -56,7 +56,7 @@ export WANDB_API_KEY="wandb_v1_5y5JqALBMdHhru8CR1gOLflJlRj_O8BG2XRb0S2x0TJVqW1xA
 export WANDB_PROJECT="llava-ov-1_5"
 export WANDB_NAME="fastvit_integration"
 
-export CUDA_VISIBLE_DEVICES=0,1  
-export GPUS_PER_NODE=2
+export CUDA_VISIBLE_DEVICES=0  
+export GPUS_PER_NODE=1
 
-bash examples/llava_ov_1_5/quick_start/stage_1_alignment_llava_ov_4b.sh 2 1
+bash examples/llava_ov_1_5/quick_start/stage_1_alignment_llava_ov_4b.sh 

@@ -137,7 +137,7 @@ class Qwen2VLTaskEncoder(TaskEncoder):
         # Use this for vision encoding instead of Qwen2-VL's processor
         self.use_fastvit = getattr(args, 'use_fastvit', False)
         if self.use_fastvit:
-            fastvit_image_size = getattr(args, 'fastvit_image_size', 384)
+            fastvit_image_size = getattr(args, 'fastvit_image_size', 1024)
             self.fastvit_processor = FastViTImageProcessor(image_size=fastvit_image_size)
             print(f"Initialized FastViT processor with image_size={fastvit_image_size}")
         
@@ -236,7 +236,7 @@ class Qwen2VLTaskEncoder(TaskEncoder):
 
     def _process(self, image, text):
         """" Process the data to get the model's input """
-        
+        print("Processing image and text...")
         if self.use_fastvit and image is not None:
             # FastViT preprocessing using FastVLM's approach
             # Tokenize text only
@@ -251,12 +251,17 @@ class Qwen2VLTaskEncoder(TaskEncoder):
             # Process image with FastVLM's preprocessing utilities
             # Default to 'pad' aspect ratio (expand to square with padding)
             image_aspect_ratio = getattr(self.args, 'image_aspect_ratio', 'pad')
-            
+            print("image_size:", image.size)
             if image_aspect_ratio == 'pad':
                 # Expand to square with mean color padding
                 mean_color = tuple(int(x * 255) for x in self.fastvit_processor.image_mean)
                 image = expand2square(image, mean_color)
                 pixel_values = self.fastvit_processor(image)
+                print("image_aspect_ratio: pad")
+                print(f"Processed padded image to shape: {pixel_values.shape}")
+                print("size after pad:", image.size)
+                
+                
             elif image_aspect_ratio == 'anyres':
                 # Process with variable resolution (patches)
                 grid_pinpoints = getattr(self.args, 'image_grid_pinpoints', '[(384, 384), (768, 384), (384, 768), (768, 768)]')
@@ -454,7 +459,9 @@ class Qwen2VLTaskEncoder(TaskEncoder):
         attn_mask = torch.zeros_like(input_ids).bool()
         # attn_mask: Tensor([False, False, False, ..., False, False])  # Shape: [seq_len]
 
-
+        print("pixel_values_images:", pixel_values_images)
+        print("image_grid_thw:", image_grid_thw)
+        
 
         return input_ids, target, attn_mask, pixel_values_images, image_grid_thw, \
                     pixel_values_videos, video_grid_thw
@@ -520,7 +527,7 @@ class Qwen2VLTaskEncoder(TaskEncoder):
         if text[-1] == '\n':
             text = text[:-1]
             pass  
-            
+        print("image_size in encode_vqa4packing:", sample.image.size)   
         input_ids, _, imgs, image_grid_thw, attn_mask = self._process(sample.image, text)
         target = torch.ones_like(input_ids) * IGNORE_INDEX
         answers = self.tokenizer.tokenize(sample.answers)
@@ -584,12 +591,18 @@ class Qwen2VLTaskEncoder(TaskEncoder):
     # For SFT with multi-modal data, it calls:
     def encode_multi_mix_qa(self, sample: MultiMixQASample) -> ImageTaskSample:
         """Encode sample in Qwen2VL style."""
+        print("Encoding multi-mix qa")
         if self.args.training_phase == constants.TrainingPhase.SFT:
             num_tiles = [] #store number of tiles for each image/ video after processing
-            
+            print("calling process_sft_qa for multi-mix sample")
             # call main processing function process_sft_qa
             input_ids, target, attn_mask, imgs, image_grid_thw, pixel_values_videos, video_grid_thw = \
                         self.process_sft_qa(sample.messages, sample.system, sample.video, sample.image)
+            print("imgs:", imgs)
+            print("image_grid_thw:", image_grid_thw)
+            print("pixel_values_images:", pixel_values_images)
+            print("video_grid_thw:", video_grid_thw)
+            print("pixel_values_videos:", pixel_values_videos)
             if sample.video is not None:
                 num_tiles = [len(video_grid_thw)] if video_grid_thw is not None else [1]
             elif sample.image is not None:

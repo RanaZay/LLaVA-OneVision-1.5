@@ -60,11 +60,13 @@ class MobileCLIPVisionTower(nn.Module):
     def feature_select(self, image_forward_outs):
         # Features from penultimate layer
         image_features = image_forward_outs["image_embeddings"]
+        print(f"[MobileCLIP] Vision tower output (4D): {image_features.shape}")
 
         # Reshape 4D tensor to 3D
         B, C, H, W = image_features.shape
         image_features = image_features.reshape(B, C, H*W)
         image_features = image_features.transpose(1, 2)
+        print(f"[MobileCLIP] Reshaped to 3D (batch, tokens, dim): {image_features.shape}")
         return image_features
 
     def forward(self, images):

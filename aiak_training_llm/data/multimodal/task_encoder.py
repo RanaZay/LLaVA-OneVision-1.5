@@ -161,14 +161,20 @@ class TaskEncoder(DefaultTaskEncoder[OCRSample, OCRSample, ImageTaskBatchPacked,
 
     @stateless(restore_seeds=True)
     def encode_sample(self, sample: Union[CaptioningSample, OCRSample, VQASample, SimilarityInterleavedSample]):
+        print("encoding samples")
+        print("sample:", sample)
         """ Generates an encoded sample from a raw sample. """
         if isinstance(sample, CaptioningSample):
+            print("encode_captioning")
             yield self.encode_captioning(sample)
         elif isinstance(sample, VQASample):
+            print("encode_vqa")
             yield self.encode_vaq(sample)
         elif isinstance(sample, MultiVidQASample):
+            print("encode_multi_vid_qa")
             yield self.encode_multi_vid_qa(sample)
         elif isinstance(sample, MultiMixQASample):
+            print("encode_multi_mix_qa")
             yield self.encode_multi_mix_qa(sample)
         elif isinstance(sample, PackedCaptioningSample):
             # print(f"-------------PackedCaptioningSample---------------")
